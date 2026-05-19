@@ -6,5 +6,5 @@ import semv.shorturl.entity.ShortLink;
 
 @Repository
 public interface ShortLinkRepository extends JpaRepository<ShortLink, Long> {
-
+    public boolean existsByShortKey(String shortKey);
 }
