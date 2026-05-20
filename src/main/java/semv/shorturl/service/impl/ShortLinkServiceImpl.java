@@ -1,6 +1,7 @@
 package semv.shorturl.service.impl;
 
 import java.security.SecureRandom;
+import java.util.Optional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import semv.shorturl.dto.request.CreateLinkRequest;
 import semv.shorturl.dto.response.BaseResponse;
+import semv.shorturl.dto.response.GetLinkResponse;
 import semv.shorturl.entity.ShortLink;
 import semv.shorturl.exception.ExistsException;
 import semv.shorturl.exception.OverloadException;
@@ -70,6 +72,20 @@ public class ShortLinkServiceImpl implements ShortLinkService {
     public BaseResponse shortLink(CreateLinkRequest r, Long userId) {
         // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'shortLink'");
+    }
+
+    @Override
+    public GetLinkResponse getLink(String shortKey) {
+        if (shortKey.isEmpty() || shortKey.length() < 6) {
+            return GetLinkResponse.error("Short key not valid.");
+        }
+        Optional<ShortLink> tmp = shortLinkRepository.findByShortKey(shortKey);
+        if (!tmp.isPresent())
+            return GetLinkResponse.error("Short key not found.");
+
+        ShortLink link = tmp.get();
+
+        return GetLinkResponse.succes(link.getOriginalUrl());
     }
 
 }
