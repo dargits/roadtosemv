@@ -1,5 +1,6 @@
 package semv.shorturl.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -11,4 +12,6 @@ public interface ShortLinkRepository extends JpaRepository<ShortLink, Long> {
     public boolean existsByShortKey(String shortKey);
 
     public Optional<ShortLink> findByShortKey(String shortKey);
+
+    public List<ShortLink> findByUserIdOrderByCreatedAtDesc(Long userId);
 }

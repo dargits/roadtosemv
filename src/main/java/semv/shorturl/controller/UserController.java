@@ -1,5 +1,6 @@
 package semv.shorturl.controller;
 
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RestController;
 
 import semv.shorturl.dto.request.LoginRequest;
@@ -20,14 +21,14 @@ public class UserController {
     private UserService userService;
 
     @PostMapping("/register")
-    public BaseResponse register(@RequestBody RegisterRequest r) {
+    public BaseResponse register(@Valid @RequestBody RegisterRequest r) {
         BaseResponse response = userService.register(r);
 
         return response;
     }
 
     @PostMapping("/login")
-    public LoginReponse login(@RequestBody LoginRequest r) {
+    public LoginReponse login(@Valid @RequestBody LoginRequest r) {
         LoginReponse response = userService.login(r);
 
         return response;
