@@ -1,6 +1,6 @@
 ﻿# 🔗 Short URL Service
  
-Web: https://short-url-omega-liard.vercel.app/
+Web: https://shorturl-chi-tan.vercel.app/
 
 Hệ thống rút gọn URL hiện đại với tính năng tracking và analytics, được xây dựng bằng Spring Boot 4.0.6.
 
