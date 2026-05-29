@@ -33,4 +33,18 @@ public class UserController {
 
         return response;
     }
+
+    @PostMapping("/logout")
+    public BaseResponse logout(@RequestHeader(value = "Authorization") String token) {
+        BaseResponse response = userService.logout(token);
+
+        return response;
+    }
+
+    @GetMapping("/profile")
+    public BaseResponse getProfile(@RequestHeader(value = "Authorization") String token) {
+        BaseResponse response = userService.getProfile(token);
+
+        return response;
+    }
 }

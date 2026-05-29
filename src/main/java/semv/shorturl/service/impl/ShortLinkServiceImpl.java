@@ -13,24 +13,26 @@ import semv.shorturl.dto.response.AnalyticsResponse;
 import semv.shorturl.dto.response.BaseResponse;
 import semv.shorturl.dto.response.GetLinkResponse;
 import semv.shorturl.dto.response.LinkListResponse;
+import semv.shorturl.entity.LinkAnalytics;
 import semv.shorturl.entity.ShortLink;
 import semv.shorturl.exception.ExistsException;
 import semv.shorturl.exception.OverloadException;
 import semv.shorturl.repository.LinkAnalysticsRepository;
 import semv.shorturl.repository.ShortLinkRepository;
-import semv.shorturl.service.RedisService;
 import semv.shorturl.service.ShortLinkService;
 
 @Service
 public class ShortLinkServiceImpl implements ShortLinkService {
+
     @Value("${system.url}")
     private String systemUrl;
+
     @Autowired
     private ShortLinkRepository shortLinkRepository;
-    @Autowired
-    private RedisService redisService;
+
     @Autowired
     private LinkAnalysticsRepository linkAnalyticsRepository;
+
     final String alpha = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     @Override
@@ -40,19 +42,16 @@ public class ShortLinkServiceImpl implements ShortLinkService {
         while (true) {
             StringBuilder shortKey = new StringBuilder();
             for (int i = 0; i < 6; i++) {
-                int randomIndex = random.nextInt(alpha.length());
-                shortKey.append(alpha.charAt(randomIndex));
+                shortKey.append(alpha.charAt(random.nextInt(alpha.length())));
             }
 
             String generatedKey = shortKey.toString();
             if (!shortLinkRepository.existsByShortKey(generatedKey)) {
                 return generatedKey;
             }
-            count++;
-            if (count > 10) {
+            if (++count > 10) {
                 throw new OverloadException(400, "System busy, please try again.");
             }
-
         }
     }
 
@@ -86,6 +85,12 @@ public class ShortLinkServiceImpl implements ShortLinkService {
 
         String shortKey = createShortKey();
 
+        if (r.getCustom_link() != null && !r.getCustom_link().isEmpty()) {
+            if (shortLinkRepository.existsByShortKey(r.getCustom_link()))
+                return BaseResponse.error("Custom link exists.", 400);
+            shortKey = r.getCustom_link();
+        }
+
         ShortLink link = ShortLink.builder()
                 .originalUrl(r.getOriginal_link().trim())
                 .shortKey(shortKey)
@@ -106,13 +111,12 @@ public class ShortLinkServiceImpl implements ShortLinkService {
         if (shortKey.isEmpty() || shortKey.length() < 6) {
             return GetLinkResponse.error("Short key not valid.");
         }
+
         Optional<ShortLink> tmp = shortLinkRepository.findByShortKey(shortKey);
         if (!tmp.isPresent())
             return GetLinkResponse.error("Short key not found.");
 
-        ShortLink link = tmp.get();
-
-        return GetLinkResponse.succes(link.getOriginalUrl());
+        return GetLinkResponse.succes(tmp.get().getOriginalUrl());
     }
 
     @Override
@@ -123,34 +127,34 @@ public class ShortLinkServiceImpl implements ShortLinkService {
 
         Optional<ShortLink> tmp = shortLinkRepository.findByShortKey(shortKey);
         if (!tmp.isPresent()) {
-            // Tracking FAILED click (không có linkId vì không tìm thấy)
             trackClick(null, ipAddress, "FAILED");
             return GetLinkResponse.error("Short key not found.");
         }
 
         ShortLink link = tmp.get();
-
-        // Tracking SUCCESS click với linkId
         trackClick(link.getId(), ipAddress, "SUCCESS");
 
         return GetLinkResponse.succes(link.getOriginalUrl());
     }
 
-    // Helper method để tracking click vào Redis
+    // Tracking với GeoIP
+    @Autowired
+    private semv.shorturl.service.GeoIpService geoIpService;
+
     private void trackClick(Long linkId, String ipAddress, String status) {
         try {
-            // Format: linkId|timestamp|ip|status
-            // Ví dụ: "123|2026-05-20T10:30:45|192.168.1.1|SUCCESS"
-            String payload = (linkId != null ? linkId : "null") + "|" +
-                    LocalDateTime.now() + "|" +
-                    ipAddress + "|" +
-                    status;
+            String country = geoIpService.getCountryFromIp(ipAddress);
 
-            // Lưu vào Redis List với key tracking:linkId (hoặc tracking:failed nếu không có linkId)
-            String redisKey = linkId != null ? linkId.toString() : "failed";
-            redisService.pushClick(redisKey, payload);
+            LinkAnalytics analytics = LinkAnalytics.builder()
+                    .linkId(linkId)
+                    .ipAddress(ipAddress)
+                    .country(country)
+                    .status(status)
+                    .clickedAt(LocalDateTime.now())
+                    .build();
+
+            linkAnalyticsRepository.save(analytics);
         } catch (Exception e) {
-            // Log lỗi nhưng không làm gián đoạn redirect
             System.err.println("Failed to track click: " + e.getMessage());
         }
     }
@@ -174,7 +178,6 @@ public class ShortLinkServiceImpl implements ShortLinkService {
 
     @Override
     public AnalyticsResponse getLinkAnalytics(Long linkId, Long userId) {
-        // Kiểm tra link có tồn tại không
         Optional<ShortLink> tmp = shortLinkRepository.findById(linkId);
         if (!tmp.isPresent()) {
             return AnalyticsResponse.error("Link not found.", 404);
@@ -182,23 +185,20 @@ public class ShortLinkServiceImpl implements ShortLinkService {
 
         ShortLink link = tmp.get();
 
-        // Kiểm tra quyền sở hữu
         if (link.getUserId() == null || !link.getUserId().equals(userId)) {
             return AnalyticsResponse.error("You don't have permission to view this analytics.", 403);
         }
 
-        // Lấy tổng số clicks
         Long totalClicks = linkAnalyticsRepository.countByLinkId(linkId);
 
-        // Lấy 20 clicks gần nhất
         var recentAnalytics = linkAnalyticsRepository.findTop20ByLinkIdOrderByClickedAtDesc(linkId);
 
         var clickInfos = recentAnalytics.stream()
-                .map(analytics -> AnalyticsResponse.ClickInfo.builder()
-                        .ipAddress(analytics.getIpAddress())
-                        .country(analytics.getCountry())
-                        .status(analytics.getStatus())
-                        .clickedAt(analytics.getClickedAt())
+                .map(a -> AnalyticsResponse.ClickInfo.builder()
+                        .ipAddress(a.getIpAddress())
+                        .country(a.getCountry())
+                        .status(a.getStatus())
+                        .clickedAt(a.getClickedAt())
                         .build())
                 .toList();
 
@@ -213,5 +213,61 @@ public class ShortLinkServiceImpl implements ShortLinkService {
         return AnalyticsResponse.success(analyticsData);
     }
 
-}
+    @Override
+    public BaseResponse deleteLink(Long linkId, Long userId) {
+        Optional<ShortLink> tmp = shortLinkRepository.findById(linkId);
+        if (!tmp.isPresent()) {
+            return BaseResponse.error("Link not found.", 404);
+        }
 
+        ShortLink link = tmp.get();
+
+        if (link.getUserId() == null || !link.getUserId().equals(userId)) {
+            return BaseResponse.error("You don't have permission to delete this link.", 403);
+        }
+
+        shortLinkRepository.delete(link);
+
+        return BaseResponse.builder()
+                .code(200)
+                .message("Link deleted successfully.")
+                .build();
+    }
+
+    @Override
+    public BaseResponse updateLink(Long linkId, CreateLinkRequest r, Long userId) {
+        Optional<ShortLink> tmp = shortLinkRepository.findById(linkId);
+        if (!tmp.isPresent()) {
+            return BaseResponse.error("Link not found.", 404);
+        }
+
+        ShortLink link = tmp.get();
+
+        if (link.getUserId() == null || !link.getUserId().equals(userId)) {
+            return BaseResponse.error("You don't have permission to update this link.", 403);
+        }
+
+        // Cập nhật original URL
+        if (r.getOriginal_link() != null && !r.getOriginal_link().trim().isEmpty()) {
+            link.setOriginalUrl(r.getOriginal_link().trim());
+        }
+
+        // Cập nhật custom link nếu có
+        if (r.getCustom_link() != null && !r.getCustom_link().isEmpty()) {
+            if (!r.getCustom_link().equals(link.getShortKey())) {
+                if (shortLinkRepository.existsByShortKey(r.getCustom_link())) {
+                    return BaseResponse.error("Custom link already exists.", 400);
+                }
+                link.setShortKey(r.getCustom_link());
+            }
+        }
+
+        shortLinkRepository.save(link);
+
+        return BaseResponse.builder()
+                .code(200)
+                .message("Link updated successfully.")
+                .data(systemUrl + link.getShortKey())
+                .build();
+    }
+}

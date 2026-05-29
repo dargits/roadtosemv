@@ -10,4 +10,7 @@ public interface UserService {
 
     public LoginReponse login(LoginRequest r);
 
+    public BaseResponse logout(String token);
+
+    public BaseResponse getProfile(String token);
 }

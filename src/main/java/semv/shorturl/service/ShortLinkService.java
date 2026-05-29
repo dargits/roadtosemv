@@ -21,4 +21,7 @@ public interface ShortLinkService {
 
     public AnalyticsResponse getLinkAnalytics(Long linkId, Long userId);
 
+    public BaseResponse deleteLink(Long linkId, Long userId);
+
+    public BaseResponse updateLink(Long linkId, CreateLinkRequest r, Long userId);
 }

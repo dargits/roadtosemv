@@ -77,4 +77,33 @@ public class ShortLinkController {
         return shortLinkService.getLinkAnalytics(linkId, userId);
     }
 
+    @GetMapping("/delete/{linkId}")
+    public BaseResponse deleteLink(
+            @PathVariable Long linkId,
+            @RequestHeader(value = "Authorization") String token) {
+        String[] tokenData = redisService.getToken(token);
+
+        if (tokenData == null || tokenData.length < 2) {
+            return BaseResponse.error("Unauthorized. Please login.", 401);
+        }
+
+        Long userId = Long.parseLong(tokenData[0]);
+        return shortLinkService.deleteLink(linkId, userId);
+    }
+
+    @PostMapping("/update/{linkId}")
+    public BaseResponse updateLink(
+            @PathVariable Long linkId,
+            @Valid @RequestBody CreateLinkRequest r,
+            @RequestHeader(value = "Authorization") String token) {
+        String[] tokenData = redisService.getToken(token);
+
+        if (tokenData == null || tokenData.length < 2) {
+            return BaseResponse.error("Unauthorized. Please login.", 401);
+        }
+
+        Long userId = Long.parseLong(tokenData[0]);
+        return shortLinkService.updateLink(linkId, r, userId);
+    }
+
 }

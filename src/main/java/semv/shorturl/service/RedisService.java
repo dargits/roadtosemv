@@ -49,24 +49,4 @@ public class RedisService {
     public void deleteToken(String token) {
         redis.delete("token:" + token);
     }
-
-    // -------- CLICK TRACKING --------
-
-    public void pushClick(String shortKey, String payload) {
-        redis.opsForList().rightPush("tracking:" + shortKey, payload);
-    }
-
-    public java.util.List<String> popAllClicks(String shortKey) {
-        String key = "tracking:" + shortKey;
-        Long size = redis.opsForList().size(key);
-        if (size == null || size == 0)
-            return java.util.List.of();
-        var list = redis.opsForList().range(key, 0, size - 1);
-        redis.delete(key);
-        return list != null ? list : java.util.List.of();
-    }
-
-    public java.util.Set<String> getAllTrackingKeys() {
-        return redis.keys("tracking:*");
-    }
 }
